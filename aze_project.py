@@ -2,6 +2,7 @@
 import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import db
+from firebase_admin import messaging
 
 def initializeCloudConn():
     currentUser = "a@b.com"
@@ -9,27 +10,29 @@ def initializeCloudConn():
     app = firebase_admin.initialize_app(cred, {
         'databaseURL' : 'https://home-monitor-d6760.firebaseio.com/'
     })
-
-    ref = db.reference('/')
-    print(ref.get())
     ref = db.reference('/users')
     return ref
 
 def getCloudData( ref):
-    currentUser = "a@b.com"
+    #currentUser = "a@b.com"
 
     #queryResults = ref.order_by_key().end_at("l\.com").get()
-    queryResults = ref.order_by_child('email').equal_to(currentUser).limit_to_first(1).get()
-
+    #queryResults = ref.order_by_child('email').equal_to(currentUser).limit_to_first(1).get()
     #print (queryResults)
-
     #for item in queryResults.values():
     #    print (item)
+    #print("alarm state for user", currentUser, " = ", queryResults[0]['alarmState'])
+    #return  queryResults[0]['alarmState']
+    node = ref.child('0').get()
+    return node['alarmState']
+    
 
-    print("alarm state for user", currentUser, " = ", queryResults[0]['alarmState'])
-    return  queryResults[0]['alarmState']
-
-
+def sendTempHumToCloud(ref, temp, hum):
+    node = ref.child('0/lastValue')
+    node.set({ 
+        'temperature': temp,
+        'humidity': hum
+    })
 
 #Iot libraries 
 import Adafruit_DHT
@@ -60,6 +63,9 @@ def tempHumidity():
         print ("Humidity = {0:0.1f}%".format(humidity))
     else:
         print ("Fault: ") 
+        humidity = 0
+        temperature = 0 
+    return temperature, humidity
 
 def soundDectected(inputchannel):
     #sensor is not working !!!!
@@ -69,24 +75,30 @@ def soundDectected(inputchannel):
         print ("soundDectected False")   
 
 
-GPIO.add_event_detect(soundCh , GPIO.BOTH, bouncetime=300)
-GPIO.add_event_callback(soundCh , soundDectected)
 
 
 def buzzer( aFlg):
+    print ("Buzzer state ", aFlg)   
     fFlag = not aFlg #true-no buzzer , false=buzzer 
     GPIO.output(buzzerCh, fFlag)
-    print ("aFlg={0}", aFlg)   
+    
 
 def mainLoop():
+
+    #add callback events for sound and motion 
+    GPIO.add_event_detect(soundCh , GPIO.BOTH, bouncetime=300)
+    GPIO.add_event_callback(soundCh , soundDectected)
+    # sound sensor not working 
+
     ref = initializeCloudConn()
     while True:
         aF = getCloudData(ref) #get the alarm flag as return 
         buzzer(aF) #buzzer if needed
 
         #read humidity and temparature and upload 
-        tempHumidity()
-        
+        temperature, humidity = tempHumidity()
+        sendTempHumToCloud(ref, temperature, humidity)
+
         time.sleep(3)    
 
 try :
