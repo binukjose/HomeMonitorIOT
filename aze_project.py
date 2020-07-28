@@ -4,31 +4,54 @@ from firebase_admin import credentials
 from firebase_admin import db
 from firebase_admin import messaging
 
-def initializeCloudConn():
-    currentUser = "a@b.com"
+def initializeCloudConn(email):
+    currentUser = email
     cred = credentials.Certificate("./home-monitor-service.json")
     app = firebase_admin.initialize_app(cred, {
         'databaseURL' : 'https://home-monitor-d6760.firebaseio.com/'
     })
+
     ref = db.reference('/users')
+    #queryResults1 = ref.get()
+    #print (queryResults1)
+    #exit()
+
+
+    queryResults = ref.order_by_child('email').equal_to(currentUser).limit_to_first(1).get()
+    if(queryResults == None ): 
+        print("There is no user with email: ", currentUser)
+        cleanExit()
+    #print ("len = " , len(queryResults))
+    print (queryResults)
+
+
+    '''
+    exit()
+    '''
+    items = list(queryResults.items())
+    userId = items[0][0]
+    
+    ref = db.reference('/users/' + userId) 
+    print ("userid:",userId)
+    
+    #userId = queryResults[0]
+    #print ("user id" , userId)
+    #for item in queryResults.values():
+    #    print (item)
+    #print("alarm state for user", currentUser, " = ", queryResults['alarmState'])
+    #return  queryResults[0]['alarmState']
+    
     return ref
 
 def getCloudData( ref):
-    #currentUser = "a@b.com"
-
-    #queryResults = ref.order_by_key().end_at("l\.com").get()
-    #queryResults = ref.order_by_child('email').equal_to(currentUser).limit_to_first(1).get()
-    #print (queryResults)
-    #for item in queryResults.values():
-    #    print (item)
-    #print("alarm state for user", currentUser, " = ", queryResults[0]['alarmState'])
-    #return  queryResults[0]['alarmState']
-    node = ref.child('0').get()
+    
+    node = ref.get()
+    #print ("getCloudData" , node)
     return node['alarmState'],node['enableMotionSensor'],node['enableSoundSensor']
     
 
-def sendTempHumToCloud(ref, temp, hum):
-    node = ref.child('0')
+def sendTempHumToCloud(node,temp, hum):
+    
     if(temp > 0.1) :
         node.update({ 
             'temperature': temp
@@ -71,8 +94,8 @@ def tempHumidity():
         temperature = 0 
     #convert to faranheat 
     temperature = (temperature * 9/5) + 32 
-    print ("Temp={0:0.1f}F ".format(temperature))
-    print ("Humidity = {0:0.1f}%".format(humidity))
+    #print ("Temp={0:0.1f}F ".format(temperature))
+    #print ("Humidity = {0:0.1f}%".format(humidity))
     return temperature, humidity
 
 def soundDectected(inputchannel):
@@ -83,49 +106,49 @@ def soundDectected(inputchannel):
         print ("soundDectected False")   
 
 
-def motionDectected(ref):
-    motion = False
+def motionDectected(node):
     if GPIO.input(motionCh) :
         print ("motionDectected True")
         motion = True
     else:
-        print ("motionDectected False")
-    node = ref.child('0')
+        #print ("motionDectected False")
+        motion = False
+    
     node.update({ 
-    'MotionDectected': motion
+    'motionDectected': motion
     }) 
     return motion
 
 
 def buzzer( aFlg):
-    print ("Buzzer state ", aFlg)   
     fFlag = not aFlg #true-no buzzer , false=buzzer 
     GPIO.output(buzzerCh, fFlag)
 
 
 ## alert messages to the user app
-def sendMotoinAlert()
+def sendMotoinAlert():
     pass
 
 
-def mainLoop():
+def mainLoop(email):
 
     #add callback events for sound and motion 
     GPIO.add_event_detect(soundCh , GPIO.BOTH, bouncetime=300)
     GPIO.add_event_callback(soundCh , soundDectected)
     # sound sensor not working 
 
-    ref = initializeCloudConn()
+    ref = initializeCloudConn(email)
     while True:
+        #print (ref)
+        alarmFlag,motionFlag,soundFlag = getCloudData(ref) #get the alarm flag, motionflag, soundFlag as return 
         
-        aF,motionFlag,soundFlag = getCloudData(ref) #get the alarm flag, motionflag, soundFlag as return 
-        '''
-        buzzer(aF) #buzzer if needed
+        print ("alarmFlag=",alarmFlag," motionFlag=",motionFlag, "soundFlag=",soundFlag )
+        buzzer(alarmFlag) #buzzer if needed
 
         #read humidity and temparature and upload 
         temperature, humidity = tempHumidity()
         sendTempHumToCloud(ref, temperature, humidity)
-        '''
+        
         motion = False
         if(motionFlag) :
             motion = motionDectected(ref)
@@ -133,13 +156,24 @@ def mainLoop():
         if(motion):
             sendMotoinAlert()
 
-        time.sleep(.3)    
+        time.sleep(3)    
 
-try :
-    mainLoop()
-except KeyboardInterrupt:
+def cleanExit():
     GPIO.cleanup()
-    exit
+    exit()
+
+#Mian program starts here 
+import sys
+if( len(sys.argv) != 2):
+    print ('Usage:')    
+    print ('aze_project.py <user-emailid>')    
+    cleanExit
+try :
+    email = str (sys.argv[1])
+    #print(email)
+    mainLoop(email)
+except KeyboardInterrupt:
+    cleanExit()
 
 
 
