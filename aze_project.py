@@ -24,7 +24,7 @@ def getCloudData( ref):
     #print("alarm state for user", currentUser, " = ", queryResults[0]['alarmState'])
     #return  queryResults[0]['alarmState']
     node = ref.child('0').get()
-    return node['alarmState']
+    return node['alarmState'],node['enableMotionSensor'],node['enableSoundSensor']
     
 
 def sendTempHumToCloud(ref, temp, hum):
@@ -49,6 +49,7 @@ DHT_PIN = 4
 #channels 
 soundCh = 17
 buzzerCh = 27 
+motionCh= 22
 
 #flags
 aF = False  #alaram flag 
@@ -58,6 +59,7 @@ GPIO.setwarnings (False)
 GPIO.setmode (GPIO.BCM)
 GPIO.setup(soundCh , GPIO.IN)
 GPIO.setup(buzzerCh, GPIO.OUT)
+GPIO.setup(motionCh , GPIO.IN, GPIO.PUD_DOWN)
 
 def tempHumidity():
     humidity, temperature = Adafruit_DHT.read(DHT_SENSOR, DHT_PIN)
@@ -81,13 +83,30 @@ def soundDectected(inputchannel):
         print ("soundDectected False")   
 
 
+def motionDectected(ref):
+    motion = False
+    if GPIO.input(motionCh) :
+        print ("motionDectected True")
+        motion = True
+    else:
+        print ("motionDectected False")
+    node = ref.child('0')
+    node.update({ 
+    'MotionDectected': motion
+    }) 
+    return motion
 
 
 def buzzer( aFlg):
     print ("Buzzer state ", aFlg)   
     fFlag = not aFlg #true-no buzzer , false=buzzer 
     GPIO.output(buzzerCh, fFlag)
-    
+
+
+## alert messages to the user app
+def sendMotoinAlert()
+    pass
+
 
 def mainLoop():
 
@@ -98,19 +117,27 @@ def mainLoop():
 
     ref = initializeCloudConn()
     while True:
-        aF = getCloudData(ref) #get the alarm flag as return 
+        
+        aF,motionFlag,soundFlag = getCloudData(ref) #get the alarm flag, motionflag, soundFlag as return 
+        '''
         buzzer(aF) #buzzer if needed
 
         #read humidity and temparature and upload 
         temperature, humidity = tempHumidity()
         sendTempHumToCloud(ref, temperature, humidity)
+        '''
+        motion = False
+        if(motionFlag) :
+            motion = motionDectected(ref)
 
-        time.sleep(3)    
+        if(motion):
+            sendMotoinAlert()
+
+        time.sleep(.3)    
 
 try :
     mainLoop()
 except KeyboardInterrupt:
-    
     GPIO.cleanup()
     exit
 
