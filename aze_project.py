@@ -28,12 +28,15 @@ def getCloudData( ref):
     
 
 def sendTempHumToCloud(ref, temp, hum):
-    node = ref.child('0/lastValue')
-    node.set({ 
-        'temperature': temp,
-        'humidity': hum
-    })
-
+    node = ref.child('0')
+    if(temp > 0.1) :
+        node.update({ 
+            'temperature': temp
+        })
+    if(hum > 0.1) :
+            node.update({ 
+            'humidity': hum
+        })
 #Iot libraries 
 import Adafruit_DHT
 import RPi.GPIO as GPIO 
@@ -59,12 +62,15 @@ GPIO.setup(buzzerCh, GPIO.OUT)
 def tempHumidity():
     humidity, temperature = Adafruit_DHT.read(DHT_SENSOR, DHT_PIN)
     if humidity is not None and temperature is not None:
-        print ("Temp={0:0.1f}C ".format(temperature))
-        print ("Humidity = {0:0.1f}%".format(humidity))
+        pass
     else:
         print ("Fault: ") 
         humidity = 0
         temperature = 0 
+    #convert to faranheat 
+    temperature = (temperature * 9/5) + 32 
+    print ("Temp={0:0.1f}F ".format(temperature))
+    print ("Humidity = {0:0.1f}%".format(humidity))
     return temperature, humidity
 
 def soundDectected(inputchannel):
